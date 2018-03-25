@@ -31,6 +31,20 @@ class FibonacciClient
     response
   end
 
+  def call2(n)
+    @call_id = generate_uuid
+
+    exchange.publish(n.to_s,
+                     routing_key: server_queue_name,
+                     correlation_id: call_id,
+                     reply_to: reply_queue.name)
+
+    # wait for the signal to continue the execution
+    lock.synchronize { condition.wait(lock) }
+
+    response
+  end
+
   def stop
     channel.close
     connection.close
@@ -46,7 +60,7 @@ class FibonacciClient
 
     reply_queue.subscribe do |_delivery_info, properties, payload|
       if properties[:correlation_id] == that.call_id
-        that.response = payload.to_i
+        that.response = payload
 
         # sends the signal to continue the execution of #call
         that.lock.synchronize { that.condition.signal }
@@ -58,6 +72,7 @@ class FibonacciClient
     # very naive but good enough for code examples
     "#{rand}#{rand}#{rand}"
   end
+
 end
 
 client = FibonacciClient.new('rpc_queue',ENV["RABBITMQ_BIGWIG_RX_URL"])
@@ -69,14 +84,14 @@ client = FibonacciClient.new('rpc_queue',ENV["RABBITMQ_BIGWIG_RX_URL"])
 # response = client.call(30)
 #
 # puts " [.] Got #{response}"
-count  = 0;
+#count  = 0;
 loop do
   puts "I am busy I can't wait"
-  count = count + 1
+  #count = count + 1
   thr = Thread.new {
-      puts " [x] Requesting fib(#{count})"; response = client.call(count);puts " [.] Got #{response}";
+      puts " [x] Requesting Hello"; response = client.call2(31);puts " [.] Got #{response}";
   }
-  count = 0 if count == 30
+  #count = 0 if count == 30
   #thr.join
   puts "I am busy I can't wait"
   sleep 5.0

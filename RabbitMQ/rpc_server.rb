@@ -14,6 +14,12 @@ class FibonacciServer
     subscribe_to_queue
   end
 
+  # def start(queue_name)
+  #   @queue2 = channel.queue(queue_name)
+  #   @exchange2 = channel.default_exchange
+  #   subscribe_to_queue2
+  # end
+
   def stop
     channel.close
     connection.close
@@ -21,15 +27,40 @@ class FibonacciServer
 
   private
 
-  attr_reader :channel, :exchange, :queue, :connection
+  attr_reader :channel, :exchange, :queue, :connection, :exchange2, :queue2
 
   def subscribe_to_queue
     queue.subscribe(block: true) do |_delivery_info, properties, payload|
-      puts "[x] Get message #{payload.to_i}. Gonna caculate the fibonacci of #{payload.to_i}"
-      result = fibonacci(payload.to_i)
+      puts "[x] Get message #{payload}. Gonna caculate the fibonacci of #{payload}"
+      result = payload.to_i
+      puts result < 30
+      if (payload.to_i < 30)
+        result = fibonacci(payload.to_i)
+        result = result.to_s
+      else
+        result = sayHello(payload.to_i)
+      end
+
+      puts result
+      puts result.class
+
 
 
       exchange.publish(
+        result,
+        routing_key: properties.reply_to,
+        correlation_id: properties.correlation_id
+      )
+    end
+  end
+
+  def subscribe_to_queue2
+    queue2.subscribe(block: true) do |_delivery_info, properties, payload|
+      puts "[x] Get message #{payload.to_i}. Gonna Say hello to #{payload.to_i}"
+      result = sayHello(payload.to_i)
+
+
+      exchange2.publish(
         result.to_s,
         routing_key: properties.reply_to,
         correlation_id: properties.correlation_id
@@ -42,6 +73,14 @@ class FibonacciServer
 
     fibonacci(value - 1) + fibonacci(value - 2)
   end
+
+  def sayHello(value)
+    return "Hello + #{value.to_s}"
+  end
+
+  def is_numeric(o)
+    true if Integer(o) rescue false
+  end
 end
 
 begin
@@ -49,6 +88,7 @@ begin
 
   puts ' [x] Awaiting RPC requests'
   server.start('rpc_queue')
+  #server.start2('rpc_queue_hello')
 rescue Interrupt => _
   server.stop
 end
